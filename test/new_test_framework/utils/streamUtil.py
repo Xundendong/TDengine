@@ -971,7 +971,12 @@ class StreamUtil:
 
 tdStream = StreamUtil()
 
-
+class StreamResultCheckMode(Enum):
+    CHHECK_DEFAULT = "CHECK_DEFAULT"
+    CHECK_ARRAY_BY_SQL = "CHECK_ARRAY_BY_SQL"
+    CHECK_ROW_BY_SQL = "CHECK_ROW_BY_SQL"
+    CHECK_BY_FILE = "CHECK_BY_FILE"
+    
 class StreamItem:
     def __init__(
         self,
@@ -981,7 +986,7 @@ class StreamItem:
         exp_query="",
         exp_rows=[],
         check_func=None,
-        expect_query_by_row="",
+        check_mode = StreamResultCheckMode.CHHECK_DEFAULT,
         result_param_mapping={},
     ):
         self.id = id
@@ -991,8 +996,8 @@ class StreamItem:
         self.exp_rows = exp_rows
         self.check_func = check_func
 
-        self.expect_query_by_row = expect_query_by_row
         self.result_param_mapping = result_param_mapping
+        self.check_mode = check_mode
 
     def createStream(self):
         tdLog.info(self.stream)
@@ -1084,9 +1089,10 @@ class StreamItem:
         if not isinstance(mapping, dict):
             raise ValueError("参数映射必须是字典类型")
         self.result_param_mapping = mapping
+        self.check_mode = StreamResultCheckMode.CHECK_ROW_BY_SQL
 
     def checkResultsByRow(self):
-        if self.expect_query_by_row == "":
+        if self.check_mode != StreamResultCheckMode.CHECK_ROW_BY_SQL:
             return
         tdSql.query(self.res_query)
 
@@ -1100,7 +1106,7 @@ class StreamItem:
                 for param_name, col_index in self.result_param_mapping.items()
                 if col_index < colNum
             }
-            sql = self.expect_query_by_row.format(**params)
+            sql = self.exp_query.format(**params)
             tdLog.info(f"after fomat, sql: {sql}")
 
             tdSql.query(sql)
@@ -1109,3 +1115,42 @@ class StreamItem:
                     f"type(elm): {type(cols[colIndex][i])}, type(expect_elm): {type(tdSql.getData(0, colIndex))}"
                 )
                 tdSql.checkEqual(cols[colIndex][i], tdSql.getData(0, colIndex))
+                
+    def checkResultsByMode(self):
+        if self.check_mode == StreamResultCheckMode.CHHECK_DEFAULT or self.check_mode == StreamResultCheckMode.CHECK_ARRAY_BY_SQL:
+            self.checkResults()
+        elif self.check_mode == StreamResultCheckMode.CHECK_ROW_BY_SQL:
+            tdLog.info(f"check stream:s{self.id} results by row")
+            self.awaitResultHasRows()
+            self.checkResultsByRow()
+            
+    def awaitResultHasRows(self, waitSeconds=60):
+        """
+        确保流处理已有结果，不确认最终结果行数时使用
+        """
+        tdLog.info(f"await stream:s{self.id} stable rows stabilize")
+
+        last_rows = 0
+        rows = 0
+        
+        for loop in range(waitSeconds):
+            if False == tdSql.query(self.res_query, None, 1, None, False, False):
+                tdLog.info(f"{self.res_query} has failed for {loop} times")
+                time.sleep(1)
+                continue
+
+            rows = tdSql.getRows()
+
+            if rows > 0 and rows == last_rows:
+                tdLog.info(f"Stream:s{self.id} has {rows} stable rows")
+                return
+            last_rows = rows
+            time.sleep(2)
+
+        tdLog.exit(
+            f"Stream:s{self.id} did not stabilize rows in {waitSeconds} seconds, rows now: {rows}, last rows: {last_rows}"
+        )
+                
+class SafeDict(dict):
+    def __missing__(self, key):
+        return '{' + key + '}'

@@ -1,6 +1,6 @@
 import time
 import math
-from new_test_framework.utils import tdLog, tdSql, tdStream, StreamTableType, StreamTable, StreamItem
+from new_test_framework.utils import tdLog, tdSql, tdStream, StreamTableType, StreamTable, StreamItem, StreamResultCheckMode
 from datetime import datetime
 
 class TestStreamDevBasic:
@@ -90,7 +90,8 @@ class TestStreamDevBasic:
             id=0,
             stream=sql,
             res_query="select * from test.out0;",
-            expect_query_by_row = "select '{_wstart}','{_twend}', avg(cint), count(cint) from test.trigger_0 where cts >= '{_wstart}' and cts <= '{_twend}';",
+            exp_query = "select '{_wstart}','{_twend}', avg(cint), count(cint) from test.trigger_0 where cts >= '{_wstart}' and cts <= '{_twend}';",
+            check_mode= StreamResultCheckMode.CHECK_ROW_BY_SQL,
             result_param_mapping = { "_wstart": 0,  "_twend":1}
         )
         stream.createStream()
@@ -122,7 +123,8 @@ class TestStreamDevBasic:
             id=0,
             stream=sql,
             res_query="select * from test.st7;",
-            expect_query_by_row = "select '{_wstart}','{_twend}', avg(cint), count(cint) from test.st where cts <= '{_wstart}';",
+            exp_query = "select '{_wstart}','{_twend}', avg(cint), count(cint) from test.st where cts <= '{_wstart}';",
+            check_mode= StreamResultCheckMode.CHECK_ROW_BY_SQL,
             result_param_mapping = { "_wstart": 0,  "_twend":1}
         )
 
@@ -204,21 +206,24 @@ class TestStreamDevBasic:
             id=0,
             stream=sql1,
             res_query="select * from test.out1;",
-            expect_query_by_row = "select '{_wstart}','{_twend}', avg(cint), count(cint) from test.st where cts <= '{_wstart}';",
+            exp_query = "select '{_wstart}','{_twend}', avg(cint), count(cint) from test.st where cts <= '{_wstart}';",
+            check_mode= StreamResultCheckMode.CHECK_ROW_BY_SQL,
             result_param_mapping = { "_wstart": 0,  "_twend":1}
         )
         stream2 = StreamItem(
             id=0,
             stream=sql2,
             res_query="select * from test.out2 where tag_tbname='trigger_0';",
-            expect_query_by_row = "select '{_wstart}','{_twend}', avg(cint), count(cint) from test.st where cts <= '{_wstart}';",
+            exp_query = "select '{_wstart}','{_twend}', avg(cint), count(cint) from test.st where cts <= '{_wstart}';",
+            check_mode= StreamResultCheckMode.CHECK_ROW_BY_SQL,
             result_param_mapping = { "_wstart": 0,  "_twend":1}
         )
         stream3 = StreamItem(
             id=0,
             stream=sql3,
             res_query="select * from test.out3 where tag_tbname='trigger_0';",
-            expect_query_by_row = "select '{_wstart}','{_twend}', avg(cint), count(cint) from test.trigger_0 where cts <= '{_wstart}' and cts <= '{_twend}';",
+            exp_query = "select '{_wstart}','{_twend}', avg(cint), count(cint) from test.trigger_0 where cts <= '{_wstart}' and cts <= '{_twend}';",
+            check_mode= StreamResultCheckMode.CHECK_ROW_BY_SQL,
             result_param_mapping = { "_wstart": 0,  "_twend":1}
         )
         stream1.createStream()
