@@ -444,7 +444,7 @@ class PlannerTestBaseImpl {
       SCreateIndexStmt* pStmt = (SCreateIndexStmt*)pQuery->pRoot;
       SCmdMsgInfo* pCmdMsg = (SCmdMsgInfo*)taosMemoryMalloc(sizeof(SCmdMsgInfo));
       if (NULL == pCmdMsg) FAIL();
-      pCmdMsg->msgType = TDMT_MND_CREATE_SMA;
+      //pCmdMsg->msgType = TDMT_MND_CREATE_SMA;
       pCmdMsg->msgLen = tSerializeSMCreateSmaReq(NULL, 0, pStmt->pReq);
       pCmdMsg->pMsg = taosMemoryMalloc(pCmdMsg->msgLen);
       if (!pCmdMsg->pMsg) FAIL();

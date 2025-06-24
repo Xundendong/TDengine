@@ -294,11 +294,6 @@ typedef struct SCtgTSMAFetch {
   int32_t flag;
   int32_t vgId;
 
-  // stream progress
-  int32_t subFetchNum;
-  int32_t finishedSubFetchNum;
-  int32_t vgNum;
-
   // tb tsma
   SName tsmaSourceTbName;
 } SCtgTSMAFetch;
@@ -1229,9 +1224,8 @@ uint64_t ctgGetTbTSMACacheSize(STSMACache* pTsmaInfo);
 void     ctgFreeTbTSMAInfo(void* p);
 bool     hasOutOfDateTSMACache(SArray* pTsmas);
 bool     isCtgTSMACacheOutOfDate(STSMACache* pTsmaCache);
-int32_t  ctgGetStreamProgressFromVnode(SCatalog* pCtg, SRequestConnInfo* pConn, const SName* pTbName,
-                                       SVgroupInfo* vgroupInfo, SStreamProgressRsp* out, SCtgTaskReq* tReq,
-                                       void* bInput);
+int32_t  ctgGetStreamProgressFromMnode(SCatalog* pCtg, SRequestConnInfo* pConn, const SName* pTbName, SStreamProgressRsp* out, SCtgTaskReq* tReq,
+                                       void* bInput, int32_t nodeId);
 int32_t ctgGetVStbRefDbsFromVnode(SCatalog* pCtg, SRequestConnInfo* pConn, int64_t suid, SVgroupInfo* vgroupInfo, SCtgTaskReq* tReq);
 int32_t ctgAddTSMAFetch(SArray** pFetchs, int32_t dbIdx, int32_t tbIdx, int32_t* fetchIdx, int32_t resIdx, int32_t flag,
                         CTG_TSMA_FETCH_TYPE fetchType, const SName* sourceTbName);

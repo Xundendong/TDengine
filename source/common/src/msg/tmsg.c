@@ -1174,6 +1174,14 @@ int32_t tSerializeSMCreateSmaReq(void *buf, int32_t bufLen, SMCreateSmaReq *pReq
   }
   TAOS_CHECK_EXIT(tEncodeI8(&encoder, pReq->recursiveTsma));
   TAOS_CHECK_EXIT(tEncodeCStr(&encoder, pReq->baseTsmaName));
+  TAOS_CHECK_EXIT(tEncodeI32(&encoder, pReq->streamReqLen));
+  if (pReq->streamReqLen > 0) {
+    TAOS_CHECK_EXIT(tEncodeBinary(&encoder, pReq->createStreamReq, pReq->streamReqLen));
+  }
+  TAOS_CHECK_EXIT(tEncodeI32(&encoder, pReq->dstreamReqLen));
+  if (pReq->dstreamReqLen > 0) {
+    TAOS_CHECK_EXIT(tEncodeBinary(&encoder, pReq->dropStreamReq, pReq->dstreamReqLen));
+  }
   tEndEncode(&encoder);
 
 _exit:
@@ -1260,6 +1268,22 @@ int32_t tDeserializeSMCreateSmaReq(void *buf, int32_t bufLen, SMCreateSmaReq *pR
   }
   TAOS_CHECK_EXIT(tDecodeI8(&decoder, &pReq->recursiveTsma));
   TAOS_CHECK_EXIT(tDecodeCStrTo(&decoder, pReq->baseTsmaName));
+  TAOS_CHECK_EXIT(tDecodeI32(&decoder, &pReq->streamReqLen));
+  if (pReq->streamReqLen > 0) {
+    pReq->createStreamReq = taosMemoryMalloc(pReq->streamReqLen);
+    if (pReq->createStreamReq == NULL) {
+      TAOS_CHECK_EXIT(terrno);
+    }
+    TAOS_CHECK_EXIT(tDecodeCStrTo(&decoder, pReq->createStreamReq));
+  }
+  TAOS_CHECK_EXIT(tDecodeI32(&decoder, &pReq->dstreamReqLen));
+  if (pReq->dstreamReqLen > 0) {
+    pReq->dropStreamReq = taosMemoryMalloc(pReq->dstreamReqLen);
+    if (pReq->dropStreamReq == NULL) {
+      TAOS_CHECK_EXIT(terrno);
+    }
+    TAOS_CHECK_EXIT(tDecodeCStrTo(&decoder, pReq->dropStreamReq));
+  }
   tEndDecode(&decoder);
 
 _exit:
@@ -13725,6 +13749,11 @@ static int32_t tEncodeTableTSMAInfo(SEncoder *pEncoder, const STableTSMAInfo *pT
   TAOS_CHECK_EXIT(tEncodeI64(pEncoder, pTsmaInfo->rspTs));
   TAOS_CHECK_EXIT(tEncodeI64(pEncoder, pTsmaInfo->delayDuration));
   TAOS_CHECK_EXIT(tEncodeI8(pEncoder, pTsmaInfo->fillHistoryFinished));
+  size = pTsmaInfo->streamAddr ? 1 : 0;
+  TAOS_CHECK_EXIT(tEncodeI32(pEncoder, size));
+  if (pTsmaInfo->streamAddr) {
+    TAOS_CHECK_EXIT(tEncodeSStreamTaskAddr(pEncoder, pTsmaInfo->streamAddr));
+  }
 
 _exit:
   return code;
@@ -13798,6 +13827,18 @@ static int32_t tDecodeTableTSMAInfo(SDecoder *pDecoder, STableTSMAInfo *pTsmaInf
   TAOS_CHECK_EXIT(tDecodeI64(pDecoder, &pTsmaInfo->rspTs));
   TAOS_CHECK_EXIT(tDecodeI64(pDecoder, &pTsmaInfo->delayDuration));
   TAOS_CHECK_EXIT(tDecodeI8(pDecoder, (int8_t *)&pTsmaInfo->fillHistoryFinished));
+  TAOS_CHECK_EXIT(tDecodeI32(pDecoder, &size));
+  if (size > 0) {
+    pTsmaInfo->streamAddr = taosMemoryCalloc(1, sizeof(SStreamTaskAddr));
+    if (!pTsmaInfo->streamAddr) {
+      TAOS_CHECK_EXIT(terrno);
+    }
+
+    TAOS_CHECK_EXIT(tDecodeSStreamTaskAddr(pDecoder, pTsmaInfo->streamAddr));
+  } else {
+    pTsmaInfo->streamAddr = NULL;
+  }
+
 
 _exit:
   return code;

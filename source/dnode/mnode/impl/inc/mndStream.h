@@ -521,6 +521,7 @@ void mstDestroySStmStatus(void* param);
 void mstDestroySStmVgroupStatus(void* param);
 void mstDestroySStmSnodeStatus(void* param);
 void mstDestroySStmVgTasksToDeploy(void* param);
+int32_t msmGetTriggerTaskAddr(SMnode *pMnode, int64_t streamId, SStreamTaskAddr* pAddr);
 
 
 #ifdef __cplusplus

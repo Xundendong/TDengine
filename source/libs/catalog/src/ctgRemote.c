@@ -401,7 +401,7 @@ int32_t ctgProcessRspMsg(void* out, int32_t reqType, char* msg, int32_t msgSize,
       qDebug("tb:%s, got table tsma from mnode", target);
       break;
     }
-    case TDMT_VND_GET_STREAM_PROGRESS: {
+    case TDMT_MND_GET_STREAM_PROGRESS: {
       if (TSDB_CODE_SUCCESS != rspCode) {
         CTG_ERR_RET(rspCode);
       }
@@ -656,7 +656,7 @@ int32_t ctgAddBatch(SCatalog* pCtg, int32_t vgId, SRequestConnInfo* pConn, SCtgT
           SCtgTbMetaCtx* ctx = (SCtgTbMetaCtx*)pTask->taskCtx;
           pName = ctx->pName;
         }
-      } else if (TDMT_VND_GET_STREAM_PROGRESS == msgType) {
+      } else if (TDMT_MND_GET_STREAM_PROGRESS == msgType) {
         SCtgTbTSMACtx* pCtx = pTask->taskCtx;
         SCtgTSMAFetch* pFetch = taosArrayGet(pCtx->pFetches, tReq->msgIdx);
         if (NULL == pFetch) {
@@ -738,7 +738,7 @@ int32_t ctgAddBatch(SCatalog* pCtg, int32_t vgId, SRequestConnInfo* pConn, SCtgT
         SCtgTbMetaCtx* ctx = (SCtgTbMetaCtx*)pTask->taskCtx;
         pName = ctx->pName;
       }
-    } else if (TDMT_VND_GET_STREAM_PROGRESS == msgType) {
+    } else if (TDMT_MND_GET_STREAM_PROGRESS == msgType) {
       SCtgTbTSMACtx* pCtx = pTask->taskCtx;
       SCtgTSMAFetch* pFetch = taosArrayGet(pCtx->pFetches, tReq->msgIdx);
       if (NULL == pFetch) {
@@ -1770,12 +1770,11 @@ int32_t ctgGetTbTSMAFromMnode(SCatalog* pCtg, SRequestConnInfo* pConn, const SNa
   return TSDB_CODE_SUCCESS;
 }
 
-int32_t ctgGetStreamProgressFromVnode(SCatalog* pCtg, SRequestConnInfo* pConn, const SName* pTbName,
-                                      SVgroupInfo* vgroupInfo, SStreamProgressRsp* out, SCtgTaskReq* tReq,
-                                      void* bInput) {
+int32_t ctgGetStreamProgressFromMnode(SCatalog* pCtg, SRequestConnInfo* pConn, const SName* pTbName,
+                                      SStreamProgressRsp* out, SCtgTaskReq* tReq, void* bInput, int32_t nodeId) {
   char*   msg = NULL;
   int32_t msgLen = 0;
-  int32_t reqType = TDMT_VND_GET_STREAM_PROGRESS;
+  int32_t reqType = TDMT_MND_GET_STREAM_PROGRESS;
   char    tbFName[TSDB_TABLE_FNAME_LEN];
   int32_t code = tNameExtractFullName(pTbName, tbFName);
   if (code) {
@@ -1786,10 +1785,6 @@ int32_t ctgGetStreamProgressFromVnode(SCatalog* pCtg, SRequestConnInfo* pConn, c
 
   SCtgTask* pTask = tReq ? tReq->pTask : NULL;
   void* (*mallocFp)(int64_t) = pTask ? (MallocType)taosMemMalloc : (MallocType)rpcMallocCont;
-
-  SEp* pEp = &vgroupInfo->epSet.eps[vgroupInfo->epSet.inUse];
-  ctgDebug("tb:%s try to get stream progress from vnode, vgId:%d, ep num:%d, ep %s:%d", tbFName, vgroupInfo->vgId,
-           vgroupInfo->epSet.numOfEps, pEp->fqdn, pEp->port);
 
   code = queryBuildMsg[TMSG_INDEX(reqType)](bInput, &msg, 0, &msgLen, mallocFp);
   if (code) {
@@ -1804,12 +1799,8 @@ int32_t ctgGetStreamProgressFromVnode(SCatalog* pCtg, SRequestConnInfo* pConn, c
     }
     CTG_ERR_RET(ctgUpdateMsgCtx(CTG_GET_TASK_MSGCTX(pTask, tReq->msgIdx), reqType, pOut, (char*)tbFName));
 
-    SRequestConnInfo vConn = {.pTrans = pConn->pTrans,
-                              .requestId = pConn->requestId,
-                              .requestObjRefId = pConn->requestObjRefId,
-                              .mgmtEps = vgroupInfo->epSet};
 #if CTG_BATCH_FETCH
-    CTG_RET(ctgAddBatch(pCtg, vgroupInfo->vgId, &vConn, tReq, reqType, msg, msgLen));
+    CTG_RET(ctgAddBatch(pCtg, nodeId, pConn, tReq, reqType, msg, msgLen));
 #else
     char dbFName[TSDB_DB_FNAME_LEN];
     (void)tNameGetFullDbName(pTbName, dbFName);
@@ -1834,7 +1825,7 @@ int32_t ctgGetStreamProgressFromVnode(SCatalog* pCtg, SRequestConnInfo* pConn, c
   };
 
   SRpcMsg rpcRsp = {0};
-  CTG_ERR_RET(rpcSendRecv(pConn->pTrans, &vgroupInfo->epSet, &rpcMsg, &rpcRsp));
+  CTG_ERR_RET(rpcSendRecv(pConn->pTrans, &pConn->mgmtEps, &rpcMsg, &rpcRsp));
 
   CTG_ERR_RET(ctgProcessRspMsg(out, reqType, rpcRsp.pCont, rpcRsp.contLen, rpcRsp.code, (char*)tbFName));
 
