@@ -8,17 +8,91 @@ description: 流式计算的相关 SQL 的详细语法
 ## 创建流式计算
 
 ```sql
-CREATE STREAM [IF NOT EXISTS] stream_name [stream_options] INTO stb_name[(field1_name, field2_name [COMPOSITE KEY], ...)] [TAGS (create_definition [, create_definition] ...)] SUBTABLE(expression) AS subquery [notification_definition]
+CREATE STREAM [IF NOT EXISTS] [db_name.]stream_name stream_options [INTO [db_name.]table_name] [OUTPUT_SUBTABLE(tbname_expr)] [(column_name1, column_name2 [PRIMARY KEY][, ...])] [TAGS (tag_definition [, ...])] [AS subquery]
+
 stream_options: {
- TRIGGER        [AT_ONCE | WINDOW_CLOSE | MAX_DELAY time | FORCE_WINDOW_CLOSE| CONTINUOUS_WINDOW_CLOSE [recalculate rec_time_val] ]
- WATERMARK      time
- IGNORE EXPIRED [0|1]
- DELETE_MARK    time
- FILL_HISTORY   [0|1] [ASYNC]
- IGNORE UPDATE  [0|1]
+    trigger_type [FROM [db_name.]table_name] [PARTITION BY col1 [, ...]] [OPTIONS(stream_option [|...])] [notification_definition]
 }
+    
+trigger_type: {
+    [INTERVAL(interval_val[, interval_offset])] SLIDING(sliding_val[, offset_time]) 
+  | SESSION(ts_col, session_val)
+  | STATE_WINDOW(col) [TRUE_FOR(duration_time)] 
+  | EVENT_WINDOW(START WITH start_condition END WITH end_condition) [TRUE_FOR(duration_time)]
+  | COUNT_WINDOW(count_val[, sliding_val][, col1[, ...]]) 
+  | PERIOD(period_time[, offset_time])
+}
+    
+event_types:
+    event_type [|event_type]    
+    
+event_type: {WINDOW_OPEN | WINDOW_CLOSE}    
+
+stream_option: {WATERMARK(duration_time) | EXPIRED_TIME(exp_time) | IGNORE_DISORDER | DELETE_RECALC | DELETE_OUTPUT_TABLE | FILL_HISTORY[(start_time)] | FILL_HISTORY_FIRST[(start_time)] | CALC_NOTIFY_ONLY | LOW_LATENCY_CALC | PRE_FILTER(expr) | FORCE_OUTPUT | MAX_DELAY(delay_time) | EVENT_TYPE(event_types)}
+
+notification_definition:
+    NOTIFY(url [, ...]) [ON (event_types)] [WHERE condition] [NOTIFY_OPTIONS(notify_option[|notify_option])]
+
+notify_option: [NOTIFY_HISTORY | ON_FAILURE_PAUSE]
+
+tag_definition:
+    tag_name type_name [COMMENT 'string_value'] AS expr
 
 ```
+
+### 触发类型
+
+流式计算支持事件触发和定时触发两种触发方式，触发对象与计算对象彼此分离。
+- 事件触发：通过与触发表关联的事件时间驱动，可以灵活的定义和使用各种窗口来产生触发事件，支持在开窗、关窗以及开关窗时进行触发，支持对触发数据进行预先过滤处理，只有符合条件的数据才会进入触发。
+- 定时触发：与事件时间无关，按照系统时间定时触发。
+
+触发类型通过 `trigger_type` 指定，支持滑动触发、会话窗口触发、状态窗口触发、事件窗口触发、计数窗口触发、定时触发。其中，会话窗口触发、状态窗口触发、事件窗口触发和计数窗口触发搭配超级表时必须与 partition by tbname 一起使用。
+对于数据源表是复合主键的流，不支持状态窗口、事件窗口、计数窗口的计算。
+
+#### 定时触发
+定时触发通过系统时间的固定间隔来驱动，以建流当天系统时间的零点作为基准时间点，然后根据间隔来确定下次触发的时间点，可以通过指定时间偏移的方式来改变基准时间点。
+
+定时间隔小于 1 天：基准时间点的时间偏移在每天重置，表现为相对于每日零点的偏移；以前后两日的基准时间点为一个周期，在周期内按照间隔进行定时触发，最后一次定时触发的时间点与下一日的基准时间点之间的间隔可能小于固定的定时间隔。例如：
+- 定时间隔为 5 小时 30 分钟，那么在一天内的触发时刻为 `[00:00, 05:30, 11:00, 16:30, 22:00]`，后续每一天的触发时刻都是相同的。
+- 同样定时间隔，如果指定了偏移为 1 秒，那么在一天内的触发时刻为 `[00:01, 05:31, 11:01, 16:31, 22:01]`，后续每一天的触发时刻都是相同的。
+- 同样条件下，如果建流时当前系统时间为 `12:00`，那么在当天的触发时刻为 `[16:31, 22:01]`，后续每一天内的触发时刻同上。
+
+定时间隔大于等于 1 天：基准时间点只在第一次是相对于每日零点的偏移，后续不会进行重置。例如：
+- 定时间隔为 1 天 1 小时，建流时当前系统时间为 `05-01 12:00`，那么在当天及随后几天的触发时刻为 `[05-02 01:00, 05-03 02:00, 05-04 03:00, 05-05 04:00, ……]`。
+- 同样条件下，如果指定了偏移为 1 秒，那么在当天及随后几天的触发时刻为 `[05-02 01:01, 05-03 02:02, 05-04 03:03, 05-05 04:04, ……]`。
+
+  - PERIOD(period_time[, offset_time])：定时触发，参数含义如下：
+    - period_time：定时触发的系统时间间隔，支持的时间单位包括：毫秒(a)、秒(s)、分(m)、小时(h)、天(d)，支持的时间范围为[10a, 3650d]。
+    - [, offset_time]：可选，指定定时触发的时间偏移，支持的时间单位包括：毫秒(a)、秒(s)、分(m)、小时(h)。
+
+
+#### 滑动触发
+滑动触发是指对触发表的写入数据按照事件时间的固定间隔来驱动的触发，可以有 INTERVAL 窗口，也可以没有窗口。
+- 当存在 `INTERVAL` 窗口时，滑动触发的起始时间点是窗口的起始点，可以指定窗口的时间偏移，此时滑动的时间偏移不起作用。
+- 当不存在 `INTERVAL` 窗口时，滑动触发的触发时刻、时间偏移规则同定时触发相同，唯一的区别是系统时间变更为事件时间。
+  ffffff
+必须指定触发表，触发表为超级表时支持按 tag、子表分组，支持不分组。支持对写入数据进行处理过滤后（有条件）的窗口触发。
+
+#### 会话窗口触发
+会话窗口触发是指对触发表的写入数据按照会话窗口的方式进行窗口划分，当窗口启动和（或）关闭时进行的触发。
+
+必须指定触发表，触发表为超级表时只支持按子表分组。
+
+#### 状态窗口触发
+状态窗口触发是指对触发表的写入数据按照状态窗口的方式进行窗口划分，当窗口启动和（或）关闭时进行的触发，必须指定触发表。
+
+#### 事件窗口触发
+事件窗口触发是指对触发表的写入数据按照事件窗口的方式进行窗口划分，当窗口启动和（或）关闭时进行的触发，必须指定触发表。
+
+#### 计数窗口触发
+计数窗口触发是指对触发表的写入数据按照计数窗口的方式进行窗口划分，当窗口启动和（或）关闭时进行的触发，必须指定触发表。支持列的触发，只有当指定的列有数据写入时才触发。
+
+
+### 触发表
+
+
+#### 触发分组
+
 
 其中 subquery 是 select 普通查询语法的子集。
 
