@@ -2781,6 +2781,7 @@ static int32_t ctgTsmaFetchStreamProgress(SCtgTaskReq* tReq, const STableTSMAInf
   SRequestConnInfo* pConn = &pTask->pJob->conn;
   SVgroupInfo*      pVgInfo = NULL;
   SCtgTSMAFetch*    pFetch = taosArrayGet(pCtx->pFetches, tReq->msgIdx);
+  int32_t           subFetchIdx = 0;
   if (NULL == pFetch) {
     ctgError("fail to get the %dth SCtgTSMAFetch, totalNum:%d", tReq->msgIdx,
              (int32_t)taosArrayGetSize(pCtx->pFetches));
@@ -2809,7 +2810,8 @@ static int32_t ctgTsmaFetchStreamProgress(SCtgTaskReq* tReq, const STableTSMAInf
     pTsmaInfo->reqTs = taosGetTimestampMs();
     // make StreamProgressReq, send it
     SStreamProgressReq req = {.fetchIdx = i,
-                              .streamId = pTsmaInfo->streamUid};
+                              .streamId = pTsmaInfo->streamUid,
+                              .taskId = ((SStreamTaskAddr*)pTsmaInfo->streamAddr)->taskId};
     SRequestConnInfo vConn = {.pTrans = pConn->pTrans,
                               .requestId = pConn->requestId,
                               .requestObjRefId = pConn->requestObjRefId,
@@ -2817,6 +2819,7 @@ static int32_t ctgTsmaFetchStreamProgress(SCtgTaskReq* tReq, const STableTSMAInf
 
     CTG_ERR_JRET(ctgGetStreamProgressFromMnode(pCtg, &vConn, pTbName, NULL, tReq, &req, ((SStreamTaskAddr*)pTsmaInfo->streamAddr)->nodeId));
 
+    pFetch->subFetchNum++;
   }
 
 _return:
@@ -2972,7 +2975,6 @@ int32_t ctgHandleGetTbTSMARsp(SCtgTaskReq* tReq, int32_t reqType, const SDataBuf
 
       if (pOut->pTsmas && taosArrayGetSize(pOut->pTsmas) > 0) {
         // fetch progress
-        CTG_ERR_JRET(ctgGetTbTSMAFromMnode(pCtg, pConn, &pFetch->tsmaSourceTbName, NULL, tReq, TDMT_MND_GET_TABLE_TSMA));
         CTG_ERR_JRET(ctgTsmaFetchStreamProgress(tReq, pOut));
       } else {
         // no tsmas
@@ -3009,17 +3011,20 @@ int32_t ctgHandleGetTbTSMARsp(SCtgTaskReq* tReq, int32_t reqType, const SDataBuf
       qDebug("received stream progress for tsma %s rsp history:%d  delay:%" PRId64, pTsmaInfo->name,
              pRsp->fillHisFinished, pRsp->progressDelay);
 
-      // subfetch all finished
-      for (int32_t i = 0; i < taosArrayGetSize(pTsmaArray); ++i) {
-        STableTSMAInfo* pInfo = taosArrayGetP(pTsmaArray, i);
-        CTG_ERR_JRET(tCloneTbTSMAInfo(pInfo, &pTsma));
-        CTG_ERR_JRET(ctgUpdateTbTSMAEnqueue(pCtg, &pTsma, 0, false));
+      if (atomic_add_fetch_32(&pFetch->finishedSubFetchNum, 1) == pFetch->subFetchNum) {
+        // subfetch all finished
+        for (int32_t i = 0; i < taosArrayGetSize(pTsmaArray); ++i) {
+          STableTSMAInfo* pInfo = taosArrayGetP(pTsmaArray, i);
+          CTG_ERR_JRET(tCloneTbTSMAInfo(pInfo, &pTsma));
+          CTG_ERR_JRET(ctgUpdateTbTSMAEnqueue(pCtg, &pTsma, 0, false));
+        }
+
+        if (atomic_sub_fetch_32(&pCtx->fetchNum, 1) == 0) {
+          TSWAP(pTask->res, pCtx->pResList);
+          taskDone = true;
+        }
       }
 
-      if (atomic_sub_fetch_32(&pCtx->fetchNum, 1) == 0) {
-        TSWAP(pTask->res, pCtx->pResList);
-        taskDone = true;
-      }
 
       break;
     }
@@ -3107,7 +3112,11 @@ _return:
       code = newCode;
     }
 
-    if (0 == atomic_sub_fetch_32(&pCtx->fetchNum, 1)) {
+    bool allSubFetchFinished = false;
+    if (pMsgCtx->reqType == TDMT_MND_GET_STREAM_PROGRESS) {
+      allSubFetchFinished = atomic_add_fetch_32(&pFetch->finishedSubFetchNum, 1) >= pFetch->subFetchNum;
+    }
+    if ((allSubFetchFinished || pFetch->subFetchNum == 0) && 0 == atomic_sub_fetch_32(&pCtx->fetchNum, 1)) {
       TSWAP(pTask->res, pCtx->pResList);
       taskDone = true;
     }

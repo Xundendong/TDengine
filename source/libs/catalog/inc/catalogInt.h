@@ -294,6 +294,10 @@ typedef struct SCtgTSMAFetch {
   int32_t flag;
   int32_t vgId;
 
+  // stream progress
+  int32_t subFetchNum;
+  int32_t finishedSubFetchNum;
+
   // tb tsma
   SName tsmaSourceTbName;
 } SCtgTSMAFetch;

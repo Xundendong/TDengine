@@ -2841,6 +2841,7 @@ static int32_t tEncodeStreamProgressReq(SEncoder *pEncoder, const SStreamProgres
   int32_t lino;
 
   TAOS_CHECK_EXIT(tEncodeI64(pEncoder, pReq->streamId));
+  TAOS_CHECK_EXIT(tEncodeI64(pEncoder, pReq->taskId));
   TAOS_CHECK_EXIT(tEncodeI32(pEncoder, pReq->fetchIdx));
 
 _exit:
@@ -2874,6 +2875,7 @@ static int32_t tDecodeStreamProgressReq(SDecoder *pDecoder, SStreamProgressReq *
   int32_t lino;
 
   TAOS_CHECK_EXIT(tDecodeI64(pDecoder, &pReq->streamId));
+  TAOS_CHECK_EXIT(tDecodeI64(pDecoder, &pReq->taskId));
   TAOS_CHECK_EXIT(tDecodeI32(pDecoder, &pReq->fetchIdx));
 
 _exit:

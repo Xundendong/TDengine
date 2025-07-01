@@ -652,6 +652,7 @@ int32_t tDecodeStreamTaskStopReq(SDecoder* pDecoder, SStreamTaskStopReq* pReq);
 
 typedef struct SStreamProgressReq {
   int64_t streamId;
+  int64_t taskId;
   int32_t fetchIdx;
 } SStreamProgressReq;
 

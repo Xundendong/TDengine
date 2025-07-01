@@ -451,7 +451,7 @@ int32_t ctgHandleMsgCallback(void* param, SDataBuf* pMsg, int32_t rspCode) {
 
   SCatalog* pCtg = pJob->pCtg;
 
-  if (TDMT_VND_BATCH_META == cbParam->reqType || TDMT_MND_BATCH_META == cbParam->reqType) {
+  if (TDMT_VND_BATCH_META == cbParam->reqType || TDMT_MND_BATCH_META == cbParam->reqType || TDMT_SND_BATCH_META == cbParam->reqType) {
     CTG_ERR_JRET(ctgHandleBatchRsp(pJob, cbParam, pMsg, rspCode));
   } else {
     int32_t* taskId = taosArrayGet(cbParam->taskId, 0);
@@ -592,6 +592,7 @@ int32_t ctgAddBatch(SCatalog* pCtg, int32_t vgId, SRequestConnInfo* pConn, SCtgT
   SCtgJob*    pJob = pTask->pJob;
   SCtgBatch   newBatch = {0};
   SBatchMsg   req = {0};
+  bool        toSnode = false;
   SCtgMsgCtx* pMsgCtx = CTG_GET_TASK_MSGCTX(pTask, tReq->msgIdx);
   if (NULL == pMsgCtx) {
     ctgError("task:%d, get SCtgMsgCtx failed, taskType:%d", tReq->msgIdx, pTask->type);
@@ -674,6 +675,7 @@ int32_t ctgAddBatch(SCatalog* pCtg, int32_t vgId, SRequestConnInfo* pConn, SCtgT
           ctgError("fail to get %d SName, totalTables:%d", pFetch->tbIdx, (int32_t)taosArrayGetSize(pTbReq->pTables));
           CTG_ERR_JRET(TSDB_CODE_CTG_INTERNAL_ERROR);
         }
+        toSnode = true;
       } else {
         ctgError("invalid vnode msgType %d", msgType);
         CTG_ERR_JRET(TSDB_CODE_APP_ERROR);
@@ -682,7 +684,7 @@ int32_t ctgAddBatch(SCatalog* pCtg, int32_t vgId, SRequestConnInfo* pConn, SCtgT
       (void)tNameGetFullDbName(pName, newBatch.dbFName);
     }
 
-    newBatch.msgType = (vgId > 0) ? TDMT_VND_BATCH_META : TDMT_MND_BATCH_META;
+    newBatch.msgType = (vgId > 0) ? (toSnode ? TDMT_SND_BATCH_META : TDMT_VND_BATCH_META) : TDMT_MND_BATCH_META;
     newBatch.batchId = atomic_add_fetch_32(&pJob->batchId, 1);
 
     if (0 != taosHashPut(pBatchs, &vgId, sizeof(vgId), &newBatch, sizeof(newBatch))) {
