@@ -4299,7 +4299,7 @@ typedef struct {
   char*   createStreamReq;
   int32_t streamReqLen;
   char*   dropStreamReq;
-  int32_t dstreamReqLen;
+  int32_t dropStreamReqLen;
 } SMCreateSmaReq;
 
 int32_t tSerializeSMCreateSmaReq(void* buf, int32_t bufLen, SMCreateSmaReq* pReq);
@@ -4310,7 +4310,7 @@ typedef struct {
   char   name[TSDB_TABLE_FNAME_LEN];
   int8_t igNotExists;
   char*   dropStreamReq;
-  int32_t dstreamReqLen;
+  int32_t dropStreamReqLen;
 } SMDropSmaReq;
 
 int32_t tSerializeSMDropSmaReq(void* buf, int32_t bufLen, SMDropSmaReq* pReq);

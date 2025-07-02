@@ -459,7 +459,7 @@ static int32_t mndCreateTSMATxnPrepare(SCreateTSMACxt *pCxt) {
   createStreamUndoAction.epSet = createStreamRedoAction.epSet;
   createStreamUndoAction.acceptableCode = TSDB_CODE_MND_STREAM_NOT_EXIST;
   createStreamUndoAction.msgType = TDMT_MND_DROP_STREAM;
-  createStreamUndoAction.contLen = pCxt->pCreateSmaReq->dstreamReqLen;
+  createStreamUndoAction.contLen = pCxt->pCreateSmaReq->dropStreamReqLen;
   createStreamUndoAction.pCont = taosMemoryCalloc(1, createStreamUndoAction.contLen);
   memcpy(createStreamUndoAction.pCont, pCxt->pCreateSmaReq->dropStreamReq, createStreamUndoAction.contLen);
 
@@ -685,8 +685,9 @@ static int32_t mndDropTSMA(SCreateTSMACxt *pCxt) {
   mndGetMnodeEpSet(pCxt->pMnode, &dropStreamRedoAction.epSet);
   dropStreamRedoAction.acceptableCode = TSDB_CODE_MND_STREAM_NOT_EXIST;
   dropStreamRedoAction.msgType = TDMT_MND_DROP_STREAM;
-  dropStreamRedoAction.contLen = pCxt->pDropSmaReq->dstreamReqLen;
-  dropStreamRedoAction.pCont = taosStrdup(pCxt->pDropSmaReq->dropStreamReq);
+  dropStreamRedoAction.contLen = pCxt->pDropSmaReq->dropStreamReqLen;
+  dropStreamRedoAction.pCont = taosMemoryCalloc(1, dropStreamRedoAction.contLen);
+  memcpy(dropStreamRedoAction.pCont, pCxt->pDropSmaReq->dropStreamReq, dropStreamRedoAction.contLen);
 
   // output stable is not dropped when dropping stream, dropping it when dropping tsma
   SMDropStbReq dropStbReq = {0};

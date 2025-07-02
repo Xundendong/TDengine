@@ -10338,11 +10338,6 @@ static int32_t fillCmdSql(STranslateContext* pCxt, int16_t msgType, void* pReq) 
       break;
     }
 
-    case TDMT_MND_DROP_STREAM: {
-      //FILL_CMD_SQL(sql, sqlLen, pCmdReq, SMDropStreamReq, pReq);
-      break;
-    }
-
     case TDMT_MND_CONFIG_CLUSTER: {
       FILL_CMD_SQL(sql, sqlLen, pCmdReq, SMCfgClusterReq, pReq);
       break;
@@ -15273,7 +15268,7 @@ static int32_t createTsmaReqBuildCreateStreamReq(STranslateContext* pCxt, SCreat
   pCxt->pCurrStmt = pCurrStmt;
   pCxt->currLevel = currLevel;
 
-  pReq->streamReqLen = tSerializeSCMCreateStreamReq(0, 0, &csreq);
+  pReq->streamReqLen = tSerializeSCMCreateStreamReq(NULL, 0, &csreq);
   pReq->createStreamReq = taosMemoryCalloc(1, pReq->streamReqLen);
   if (!pReq->createStreamReq) {
     PAR_ERR_JRET(terrno);
@@ -15288,13 +15283,13 @@ static int32_t createTsmaReqBuildCreateStreamReq(STranslateContext* pCxt, SCreat
   dropcsreq.name = taosStrdup(csreq.name);
   dropcsreq.igNotExists = false;
 
-  pReq->dstreamReqLen = tSerializeSMDropStreamReq(0, 0, &dropcsreq);
-  pReq->dropStreamReq = taosMemoryCalloc(1, pReq->dstreamReqLen);
+  pReq->dropStreamReqLen = tSerializeSMDropStreamReq(NULL, 0, &dropcsreq);
+  pReq->dropStreamReq = taosMemoryCalloc(1, pReq->dropStreamReqLen);
   if (!pReq->dropStreamReq) {
     PAR_ERR_JRET(terrno);
   }
-  if (pReq->dstreamReqLen != tSerializeSMDropStreamReq(pReq->dropStreamReq,
-                                                          pReq->dstreamReqLen,
+  if (pReq->dropStreamReqLen != tSerializeSMDropStreamReq(pReq->dropStreamReq,
+                                                          pReq->dropStreamReqLen,
                                                           &dropcsreq)) {
     PAR_ERR_JRET(TSDB_CODE_INVALID_MSG);
   }
@@ -15502,20 +15497,43 @@ _return:
 static int32_t translateDropTSMA(STranslateContext* pCxt, SDropTSMAStmt* pStmt) {
   int32_t         code = TSDB_CODE_SUCCESS;
   SMDropSmaReq    dropReq = {0};
+  SMDropStreamReq dropStreamReq = {0};
   SName           name = {0};
   STableTSMAInfo* pTsma = NULL;
+
+
+
   toName(pCxt->pParseCxt->acctId, pStmt->dbName, pStmt->tsmaName, &name);
-  code = tNameExtractFullName(&name, dropReq.name);
-  if (TSDB_CODE_SUCCESS == code) {
-    dropReq.igNotExists = pStmt->ignoreNotExists;
-    code = getTsma(pCxt, &name, &pTsma);
+  PAR_ERR_JRET(tNameExtractFullName(&name, dropReq.name));
+  dropReq.igNotExists = pStmt->ignoreNotExists;
+
+  dropStreamReq.name = taosMemoryCalloc(1, TSDB_STREAM_FNAME_LEN);
+  if (NULL == dropStreamReq.name) {
+    PAR_ERR_JRET(terrno);
   }
-  if (code == TSDB_CODE_SUCCESS) {
-    toName(pCxt->pParseCxt->acctId, pStmt->dbName, pTsma->tb, &name);
-    code = collectUseTable(&name, pCxt->pTargetTables);
+  PAR_ERR_JRET(tNameExtractFullName(&name, dropStreamReq.name));
+
+
+  PAR_ERR_JRET(getTsma(pCxt, &name, &pTsma));
+  toName(pCxt->pParseCxt->acctId, pStmt->dbName, pTsma->tb, &name);
+  PAR_ERR_JRET(collectUseTable(&name, pCxt->pTargetTables));
+
+  dropStreamReq.igNotExists = false;
+
+  dropReq.dropStreamReqLen = tSerializeSMDropStreamReq(NULL, 0, &dropStreamReq);
+  dropReq.dropStreamReq = taosMemoryCalloc(1, dropReq.dropStreamReqLen);
+  if (!dropReq.dropStreamReq) {
+    PAR_ERR_JRET(terrno);
   }
-  if (TSDB_CODE_SUCCESS == code)
-    code = buildCmdMsg(pCxt, TDMT_MND_DROP_TSMA, (FSerializeFunc)tSerializeSMDropSmaReq, &dropReq);
+  if (dropReq.dropStreamReqLen != tSerializeSMDropStreamReq(dropReq.dropStreamReq,
+                                                            dropReq.dropStreamReqLen,
+                                                            &dropStreamReq)) {
+    PAR_ERR_JRET(TSDB_CODE_INVALID_MSG);
+  }
+
+  PAR_ERR_JRET(buildCmdMsg(pCxt, TDMT_MND_DROP_TSMA, (FSerializeFunc)tSerializeSMDropSmaReq, &dropReq));
+  return code;
+_return:
   return code;
 }
 

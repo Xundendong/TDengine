@@ -1178,9 +1178,9 @@ int32_t tSerializeSMCreateSmaReq(void *buf, int32_t bufLen, SMCreateSmaReq *pReq
   if (pReq->streamReqLen > 0) {
     TAOS_CHECK_EXIT(tEncodeBinary(&encoder, pReq->createStreamReq, pReq->streamReqLen));
   }
-  TAOS_CHECK_EXIT(tEncodeI32(&encoder, pReq->dstreamReqLen));
-  if (pReq->dstreamReqLen > 0) {
-    TAOS_CHECK_EXIT(tEncodeBinary(&encoder, pReq->dropStreamReq, pReq->dstreamReqLen));
+  TAOS_CHECK_EXIT(tEncodeI32(&encoder, pReq->dropStreamReqLen));
+  if (pReq->dropStreamReqLen > 0) {
+    TAOS_CHECK_EXIT(tEncodeBinary(&encoder, pReq->dropStreamReq, pReq->dropStreamReqLen));
   }
   tEndEncode(&encoder);
 
@@ -1276,9 +1276,9 @@ int32_t tDeserializeSMCreateSmaReq(void *buf, int32_t bufLen, SMCreateSmaReq *pR
     }
     TAOS_CHECK_EXIT(tDecodeCStrTo(&decoder, pReq->createStreamReq));
   }
-  TAOS_CHECK_EXIT(tDecodeI32(&decoder, &pReq->dstreamReqLen));
-  if (pReq->dstreamReqLen > 0) {
-    pReq->dropStreamReq = taosMemoryMalloc(pReq->dstreamReqLen);
+  TAOS_CHECK_EXIT(tDecodeI32(&decoder, &pReq->dropStreamReqLen));
+  if (pReq->dropStreamReqLen > 0) {
+    pReq->dropStreamReq = taosMemoryMalloc(pReq->dropStreamReqLen);
     if (pReq->dropStreamReq == NULL) {
       TAOS_CHECK_EXIT(terrno);
     }
@@ -1310,6 +1310,11 @@ int32_t tSerializeSMDropSmaReq(void *buf, int32_t bufLen, SMDropSmaReq *pReq) {
   TAOS_CHECK_EXIT(tEncodeCStr(&encoder, pReq->name));
   TAOS_CHECK_EXIT(tEncodeI8(&encoder, pReq->igNotExists));
 
+  TAOS_CHECK_EXIT(tEncodeI32(&encoder, pReq->dropStreamReqLen));
+  if (pReq->dropStreamReqLen > 0) {
+    TAOS_CHECK_EXIT(tEncodeBinary(&encoder, pReq->dropStreamReq, pReq->dropStreamReqLen));
+  }
+
   tEndEncode(&encoder);
 
 _exit:
@@ -1331,6 +1336,16 @@ int32_t tDeserializeSMDropSmaReq(void *buf, int32_t bufLen, SMDropSmaReq *pReq) 
   TAOS_CHECK_EXIT(tStartDecode(&decoder));
   TAOS_CHECK_EXIT(tDecodeCStrTo(&decoder, pReq->name));
   TAOS_CHECK_EXIT(tDecodeI8(&decoder, &pReq->igNotExists));
+
+  TAOS_CHECK_EXIT(tDecodeI32(&decoder, &pReq->dropStreamReqLen));
+  if (pReq->dropStreamReqLen > 0) {
+    pReq->dropStreamReq = taosMemoryMalloc(pReq->dropStreamReqLen);
+    if (pReq->dropStreamReq == NULL) {
+      TAOS_CHECK_EXIT(terrno);
+    }
+    TAOS_CHECK_EXIT(tDecodeCStrTo(&decoder, pReq->dropStreamReq));
+  }
+
   tEndDecode(&decoder);
 
 _exit:
