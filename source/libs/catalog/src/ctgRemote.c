@@ -552,7 +552,7 @@ _return:
 }
 
 int32_t ctgAsyncSendMsg(SCatalog* pCtg, SRequestConnInfo* pConn, SCtgJob* pJob, SArray* pTaskId, int32_t batchId,
-                        SArray* pMsgIdx, char* dbFName, int32_t vgId, int32_t msgType, void* msg, uint32_t msgSize) {
+                        SArray* pMsgIdx, char* dbFName, int32_t vgId, int32_t msgType, void** msg, uint32_t msgSize) {
   int32_t       code = 0;
   SMsgSendInfo* pMsgSendInfo = NULL;
   CTG_ERR_JRET(ctgMakeMsgSendInfo(pJob, pTaskId, batchId, pMsgIdx, msgType, &pMsgSendInfo));
@@ -561,10 +561,11 @@ int32_t ctgAsyncSendMsg(SCatalog* pCtg, SRequestConnInfo* pConn, SCtgJob* pJob, 
 
   pMsgSendInfo->requestId = pConn->requestId;
   pMsgSendInfo->requestObjRefId = pConn->requestObjRefId;
-  pMsgSendInfo->msgInfo.pData = msg;
+  pMsgSendInfo->msgInfo.pData = *msg;
   pMsgSendInfo->msgInfo.len = msgSize;
   pMsgSendInfo->msgInfo.handle = NULL;
   pMsgSendInfo->msgType = msgType;
+  *msg = NULL;
 
   code = asyncSendMsgToServer(pConn->pTrans, &pConn->mgmtEps, NULL, pMsgSendInfo);
   pMsgSendInfo = NULL;
@@ -579,6 +580,7 @@ int32_t ctgAsyncSendMsg(SCatalog* pCtg, SRequestConnInfo* pConn, SCtgJob* pJob, 
 _return:
 
   if (pMsgSendInfo) {
+    // msg will be freed outside.
     destroySendMsgInfo(pMsgSendInfo);
   }
 
@@ -804,6 +806,7 @@ int32_t ctgBuildBatchReqMsg(SCtgBatch* pBatch, int32_t vgId, void** msg, int32_t
   }
   msgSize = tSerializeSBatchReq(*msg, msgSize, &batchReq);
   if (msgSize < 0) {
+    taosMemoryFree(*msg);
     qError("tSerializeSBatchReq failed");
     CTG_ERR_RET(msgSize);
   }
@@ -830,7 +833,7 @@ int32_t ctgLaunchBatchs(SCatalog* pCtg, SCtgJob* pJob, SHashObj* pBatchs) {
 
     CTG_ERR_JRET(ctgBuildBatchReqMsg(pBatch, *vgId, &msg, &msgSize));
     code = ctgAsyncSendMsg(pCtg, &pBatch->conn, pJob, pBatch->pTaskIds, pBatch->batchId, pBatch->pMsgIdxs,
-                           pBatch->dbFName, *vgId, pBatch->msgType, msg, msgSize);
+                           pBatch->dbFName, *vgId, pBatch->msgType, &msg, msgSize);
     pBatch->pTaskIds = NULL;
     CTG_ERR_JRET(code);
 
@@ -844,7 +847,9 @@ _return:
   if (p) {
     taosHashCancelIterate(pBatchs, p);
   }
-  taosMemoryFree(msg);
+  if (msg) {
+    taosMemoryFree(msg);
+  }
 
   CTG_RET(code);
 }
